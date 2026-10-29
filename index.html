@@ -82,7 +82,7 @@ const bDel = k => tx('blobs', 'readwrite', s => s.delete(k)), bKeys = () => tx('
 
 // ── Zustand ────────────────────────────────────────────────────
 const S = { user: null, tracks: [], playlists: [], plt: {}, tab: 'songs', group: null, search: '', cur: [], q: [], qi: -1,
-  shuffle: false, repeat: false, playing: false, off: new Set(), offPl: [], full: false, sheet: null, seeking: false, offlineOK: false };
+  shuffle: false, repeat: false, playing: false, off: new Set(), offPl: [], tok: 0, full: false, sheet: null, seeking: false, offlineOK: false };
 const saveCache = () => kvSet('data', { tracks: S.tracks, playlists: S.playlists, plt: S.plt });
 
 async function loadData() {
@@ -106,12 +106,11 @@ function unlock() { if (unlocked) return; unlocked = true; au.src = SILENT; au.p
 
 async function playAt(i) {
   const t = S.q[i]; if (!t) return; S.qi = i; userPaused = false;
-  let url; const b = await bGet(t.id);
-  if (b) url = URL.createObjectURL(b);
-  else { const { data, error } = await sb.storage.from('music').createSignedUrl(t.audio_key, 43200);
-    if (error) return toast('Titel nicht verfügbar (offline?)'); url = data.signedUrl; }
-  if (S.blobUrl) { URL.revokeObjectURL(S.blobUrl); S.blobUrl = null; }
-  if (b) S.blobUrl = url;
+  const tok = ++S.tok; let b = await bGet(t.id);
+  if (!b) { toast('Lade Titel…'); b = await fetchTrack(t); if (tok !== S.tok) return; if (!b) return toast('Titel nicht verfügbar (offline?)'); }
+  const url = URL.createObjectURL(b);
+  if (S.blobUrl) URL.revokeObjectURL(S.blobUrl);
+  S.blobUrl = url;
   au.src = url; try { await au.play(); } catch {}
   media(); renderPl(); refreshMain();
 }
@@ -183,18 +182,25 @@ async function upload(files) {
 }
 
 // ── Offline Playlists ──────────────────────────────────────────
-async function syncOffline() {
-  const need = new Set(S.offPl.flatMap(p => S.plt[p] || []));
-  for (const id of [...S.off]) if (!need.has(id)) { await bDel(id); S.off.delete(id); }
-  for (const id of need) {
-    if (S.off.has(id)) continue; const t = S.tracks.find(x => x.id === id); if (!t) continue;
-    const { data, error } = await sb.storage.from('music').createSignedUrl(t.audio_key, 600);
-    if (error) return toast('Offline Download: kein Netz');
-    try { const r = await fetch(data.signedUrl); if (!r.ok) throw 0; await bSet(id, await r.blob()); S.off.add(id); toast(`Offline gespeichert: ${S.off.size}/${need.size}`); }
-    catch { return toast('Download abgebrochen'); }
+async function fetchTrack(t) { // lädt Titel einmal vollständig und speichert ihn im Gerätespeicher
+  try {
+    const { data, error } = await sb.storage.from('music').createSignedUrl(t.audio_key, 600); if (error) return null;
+    const r = await fetch(data.signedUrl); if (!r.ok) return null;
+    const b = await r.blob();
+    try { await bSet(t.id, b); S.off.add(t.id); } catch {}
+    return b;
+  } catch { return null; }
+}
+async function downloadIds(ids) {
+  const todo = ids.filter(id => !S.off.has(id)); let n = 0;
+  for (const id of todo) {
+    const t = S.tracks.find(x => x.id === id); if (!t) continue;
+    if (!(await fetchTrack(t))) { toast('Download abgebrochen (kein Netz?)'); break; }
+    toast(`Auf Gerät gespeichert: ${++n}/${todo.length}`);
   }
   refreshMain();
 }
+const syncOffline = () => downloadIds([...new Set(S.offPl.flatMap(p => S.plt[p] || []))]);
 
 // ── Rendering ──────────────────────────────────────────────────
 const isCur = t => S.q[S.qi]?.id === t.id;
@@ -239,7 +245,9 @@ function renderPl() { const e = $('pl'); if (e) { e.innerHTML = plH(); updateTim
 function sheetH() {
   const s = S.sheet; if (!s) return '';
   const inPl = S.tab === 'playlists' && S.group;
-  const items = s.t === 'add'
+  const items = s.t === 'cache'
+    ? `<button data-a="dlall">Alle Titel auf dem Gerät speichern</button><button data-a="clearcache" style="color:#f87171">Gerätespeicher leeren (${S.off.size} Titel)</button>`
+    : s.t === 'add'
     ? S.playlists.map(p => `<button data-a="addto" data-p="${p.id}" data-id="${s.id}">${esc(p.name)}</button>`).join('') || '<button data-a="x">Noch keine Playlist</button>'
     : `<button data-a="addsheet" data-id="${s.id}">Zu Playlist hinzufügen</button>${inPl ? `<button data-a="rmpl" data-id="${s.id}">Aus Playlist entfernen</button>` : ''}<button data-a="deltrack" data-id="${s.id}" style="color:#f87171">Titel löschen</button>`;
   return `<div class="sh" data-a="x"><div>${items}<button data-a="x" style="color:#777">Abbrechen</button></div></div>`;
@@ -248,7 +256,7 @@ function render() {
   const app = $('app');
   if (!S.user && !S.offlineOK) { app.innerHTML = `<div class="lg"><h1>Music</h1><input id="em" type="email" placeholder="E-Mail" autocomplete="username"><input id="pw" type="password" placeholder="Passwort" autocomplete="current-password"><button class="pill" data-a="login" style="padding:12px">Anmelden</button></div>`; return; }
   const used = S.tracks.reduce((s, t) => s + (t.size || 0), 0);
-  app.innerHTML = `<div class="hd"><div><h1>Music</h1><small>${S.tracks.length} Titel · ${(used / 1e6).toFixed(0)} von ${LIMIT / 1e6} MB</small></div><div><button class="pill" data-a="upload">+ Upload</button><button class="ic" data-a="logout">⎋</button></div></div>
+  app.innerHTML = `<div class="hd"><div><h1>Music</h1><small>${S.tracks.length} Titel · ${(used / 1e6).toFixed(0)} von ${LIMIT / 1e6} MB</small></div><div><button class="pill" data-a="upload">+ Upload</button><button class="ic" data-a="cachesheet">↓</button><button class="ic" data-a="logout">⎋</button></div></div>
   <div class="tabs">${[['songs', 'Titel'], ['artists', 'Künstler'], ['genres', 'Genre'], ['playlists', 'Playlists']].map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-a="tab" data-v="${k}">${l}</button>`).join('')}</div>
   <div id="main">${body()}</div><div id="pl">${plH()}</div><div id="sh">${sheetH()}</div>`;
   updateTime();
@@ -275,6 +283,10 @@ async function act(a, d) {
     case 'more': sheet({ t: 'more', id: d.id }); break;
     case 'addsheet': sheet({ t: 'add', id: d.id }); break;
     case 'x': sheet(null); break;
+    case 'cachesheet': sheet({ t: 'cache' }); break;
+    case 'dlall': sheet(null); downloadIds(S.tracks.map(t => t.id)); break;
+    case 'clearcache': { sheet(null); if (!confirm('Alle lokal gespeicherten Titel entfernen?')) return;
+      for (const id of [...S.off]) await bDel(id); S.off.clear(); refreshMain(); toast('Gerätespeicher geleert'); break; }
     case 'addto': { sheet(null); const pos = (S.plt[d.p] || []).length;
       const { error } = await sb.from('playlist_tracks').insert({ playlist_id: d.p, track_id: d.id, pos });
       if (error) return toast('Bereits in der Playlist'); (S.plt[d.p] = S.plt[d.p] || []).push(d.id); saveCache(); refreshMain(); toast('Hinzugefügt'); break; }
