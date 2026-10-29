@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="App_Music_Icon.png">
+<title>Music</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#000;color:#fff;font:14px -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden}
+#app{height:100dvh;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 12px env(safe-area-inset-bottom);max-width:480px;margin:0 auto}
+button,input{font:inherit;color:inherit}button{background:none;border:0;cursor:pointer}
+.hd{display:flex;justify-content:space-between;align-items:center;padding:12px 0}
+h1{font-size:24px;font-weight:800}small{color:#777;font-size:11px}
+.pill{background:#fc3c44;border-radius:12px;padding:7px 12px;font-weight:600;font-size:12px}
+.ic{font-size:18px;padding:6px 8px;color:#aaa}
+.tabs{display:flex;background:#111;border:1px solid #222;border-radius:10px;padding:3px;margin-bottom:10px}
+.tabs button{flex:1;padding:8px 0;border-radius:8px;font-size:12px;font-weight:600;color:#666}
+.tabs .on{background:#222;color:#fff}
+#main{flex:1;overflow-y:auto;background:#121212;border:1px solid #222;border-radius:16px;min-height:0}
+.se{width:calc(100% - 20px);margin:10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:9px 12px;outline:0}
+.row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid #1a1a1a;cursor:pointer}
+.tx{flex:1;min-width:0}.tx b,.tx small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx b{font-weight:500}.tx b.on{color:#fc3c44;font-weight:800}
+.cov{border-radius:8px;background:#181818;border:1px solid #222;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#555;flex-shrink:0}
+.cov img{width:100%;height:100%;object-fit:cover}
+.dot{color:#4ade80;font-size:12px}.more{color:#666;font-size:20px;padding:4px 8px}
+.gh{display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid #1e1e1e}
+.gh b{flex:1;font-size:15px}.btn{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;padding:8px 12px;font-size:12px;font-weight:700}
+.btn.on{background:#fc3c44;border-color:#fc3c44}.empty{padding:30px;text-align:center;color:#555}
+.mini{display:flex;align-items:center;gap:10px;background:#181818;border:1px solid #222;border-radius:14px;padding:8px 10px;margin-top:10px;position:relative;overflow:hidden}
+.mini .bar{position:absolute;left:0;bottom:0;height:2px;background:#fc3c44}
+.mini .ic{color:#fff;font-size:20px}
+.ov{position:fixed;inset:0;background:#000;z-index:20;padding:calc(env(safe-area-inset-top) + 12px) 24px calc(env(safe-area-inset-bottom) + 20px);display:flex;flex-direction:column;max-width:480px;margin:0 auto}
+.big{width:100%;aspect-ratio:1;border-radius:14px;margin:16px 0}
+.ctl{display:flex;justify-content:space-between;align-items:center;margin:18px 0}
+.ctl button{font-size:26px;padding:8px}.ctl .pp{width:60px;height:60px;border-radius:50%;background:#fff;color:#000;font-size:22px}
+.ctl .on{color:#fc3c44}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:#333;outline:0}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff}
+.tm{display:flex;justify-content:space-between;color:#777;font-size:11px;margin-top:6px}
+.sh{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.sh>div{width:100%;max-width:480px;background:#1a1a1a;border-radius:18px 18px 0 0;padding:12px 12px calc(env(safe-area-inset-bottom) + 12px)}
+.sh button{display:block;width:100%;text-align:left;padding:14px 10px;border-bottom:1px solid #262626}
+.lg{margin:auto 0;display:flex;flex-direction:column;gap:12px}
+.lg input{background:#1a1a1a;border:1px solid #333;border-radius:10px;padding:12px;outline:0}
+#toast{position:fixed;top:calc(env(safe-area-inset-top) + 8px);left:50%;transform:translateX(-50%);background:#1a1a1a;border:1px solid #333;border-radius:12px;padding:10px 16px;font-size:13px;z-index:50;display:none;max-width:90%;text-align:center}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<input type="file" id="fi" accept="audio/mpeg,.mp3" multiple hidden>
+<div id="toast"></div>
+<script>
+// ── Konfiguration ──────────────────────────────────────────────
+const SB_URL = 'https://bzwiedgyviuviejlyrco.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6d2llZGd5dml1dmllamx5cmNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyNjAzOTMsImV4cCI6MjEwODgzNjM5M30.SbNmPP8Z5u1grVKfsCraAdVPUybg8MHq7deSznqoZRU';
+const LIMIT = 1e9; // Supabase Free: 1 GB
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+// ── Hilfsfunktionen ────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = s => (!s || isNaN(s)) ? '0:00' : `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+const cov = (src, n) => `<div class="cov" style="width:${n}px;height:${n}px">${src ? `<img src="${src}">` : '♪'}</div>`;
+let tt; const toast = m => { const e = $('toast'); e.textContent = m; e.style.display = 'block'; clearTimeout(tt); tt = setTimeout(() => e.style.display = 'none', 3500); };
+
+// ── IndexedDB (Offline Daten und Audio) ────────────────────────
+const idb = new Promise((res, rej) => { const r = indexedDB.open('MusicSB', 1);
+  r.onupgradeneeded = () => { r.result.createObjectStore('kv'); r.result.createObjectStore('blobs'); };
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const tx = (s, m, f) => idb.then(db => new Promise((res, rej) => { const t = db.transaction(s, m); const q = f(t.objectStore(s)); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); }));
+const kvGet = k => tx('kv', 'readonly', s => s.get(k)), kvSet = (k, v) => tx('kv', 'readwrite', s => s.put(v, k));
+const bGet = k => tx('blobs', 'readonly', s => s.get(k)), bSet = (k, v) => tx('blobs', 'readwrite', s => s.put(v, k));
+const bDel = k => tx('blobs', 'readwrite', s => s.delete(k)), bKeys = () => tx('blobs', 'readonly', s => s.getAllKeys());
+
+// ── Zustand ────────────────────────────────────────────────────
+const S = { user: null, tracks: [], playlists: [], plt: {}, tab: 'songs', group: null, search: '', cur: [], q: [], qi: -1,
+  shuffle: false, repeat: false, playing: false, off: new Set(), offPl: [], full: false, sheet: null, seeking: false, offlineOK: false };
+const saveCache = () => kvSet('data', { tracks: S.tracks, playlists: S.playlists, plt: S.plt });
+
+async function loadData() {
+  try {
+    const [t, p, pt] = await Promise.all([
+      sb.from('tracks').select('*').order('created_at'),
+      sb.from('playlists').select('*').order('created_at'),
+      sb.from('playlist_tracks').select('*').order('pos')]);
+    if (t.error || p.error || pt.error) throw 0;
+    S.tracks = t.data; S.playlists = p.data; S.plt = {};
+    pt.data.forEach(r => (S.plt[r.playlist_id] = S.plt[r.playlist_id] || []).push(r.track_id));
+    saveCache();
+  } catch { const d = await kvGet('data'); if (d) Object.assign(S, d); toast('Offline Modus'); }
+}
+
+// ── Audio ──────────────────────────────────────────────────────
+const au = new Audio(); au.preload = 'auto';
+let unlocked = false, userPaused = false, wasPlaying = false;
+const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+function unlock() { if (unlocked) return; unlocked = true; au.src = SILENT; au.play().catch(() => {}); } // iOS: Element per Geste freischalten
+
+async function playAt(i) {
+  const t = S.q[i]; if (!t) return; S.qi = i; userPaused = false;
+  let url; const b = await bGet(t.id);
+  if (b) url = URL.createObjectURL(b);
+  else { const { data, error } = await sb.storage.from('music').createSignedUrl(t.audio_key, 43200);
+    if (error) return toast('Titel nicht verfügbar (offline?)'); url = data.signedUrl; }
+  if (S.blobUrl) { URL.revokeObjectURL(S.blobUrl); S.blobUrl = null; }
+  if (b) S.blobUrl = url;
+  au.src = url; try { await au.play(); } catch {}
+  media(); renderPl(); refreshMain();
+}
+function next() { if (!S.q.length) return; let i;
+  if (S.shuffle && S.q.length > 1) { do i = Math.floor(Math.random() * S.q.length); while (i === S.qi); } else i = (S.qi + 1) % S.q.length;
+  playAt(i); }
+function prev() { if (au.currentTime > 3) { au.currentTime = 0; return; } if (S.q.length) playAt((S.qi - 1 + S.q.length) % S.q.length); }
+function toggle() { if (S.qi < 0) return; if (au.paused) { userPaused = false; au.play().catch(() => {}); } else { userPaused = true; au.pause(); } }
+
+au.onplay = () => { S.playing = true; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; renderPl(); };
+au.onpause = () => { S.playing = false; if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; if (au.src !== SILENT) renderPl(); };
+au.onended = () => { if (au.src === SILENT) return; if (S.repeat) { au.currentTime = 0; au.play(); } else next(); };
+au.ontimeupdate = () => { updateTime(); if ('mediaSession' in navigator && au.duration > 0) { try { navigator.mediaSession.setPositionState({ duration: au.duration, playbackRate: 1, position: au.currentTime }); } catch {} } };
+au.onloadedmetadata = updateTime;
+document.addEventListener('visibilitychange', () => { // Wiedergabe nach Unterbrechung (Anruf, Siri) wiederherstellen
+  if (document.visibilityState === 'hidden') wasPlaying = !au.paused;
+  else if (wasPlaying && au.paused && !userPaused && S.qi >= 0) { wasPlaying = false; au.play().catch(() => {}); } });
+
+function media() {
+  if (!('mediaSession' in navigator)) return; const t = S.q[S.qi]; if (!t) return;
+  navigator.mediaSession.metadata = new MediaMetadata({ title: t.title, artist: t.artist || '', album: t.album || '',
+    artwork: t.cover ? [{ src: t.cover, sizes: '400x400', type: 'image/jpeg' }] : [] });
+}
+if ('mediaSession' in navigator) {
+  const m = navigator.mediaSession;
+  m.setActionHandler('play', () => { userPaused = false; au.play().catch(() => {}); });
+  m.setActionHandler('pause', () => { userPaused = true; au.pause(); });
+  m.setActionHandler('nexttrack', next); m.setActionHandler('previoustrack', prev);
+  m.setActionHandler('seekto', d => { if (d.seekTime != null) au.currentTime = d.seekTime; });
+}
+function updateTime() {
+  const d = au.duration || 0, c = au.currentTime || 0, p = d ? c / d * 100 : 0;
+  const sk = $('seek'); if (sk) { sk.max = d || 100; if (!S.seeking) sk.value = c; sk.style.background = `linear-gradient(to right,#fc3c44 ${p}%,#333 ${p}%)`; }
+  if ($('t1')) { $('t1').textContent = fmt(c); $('t2').textContent = '-' + fmt(d - c); }
+  if ($('mb')) $('mb').style.width = p + '%';
+}
+
+// ── Upload (Tags und Cover aus MP3) ────────────────────────────
+const readTags = f => new Promise(res => jsmediatags.read(f, { onSuccess: t => res(t.tags), onError: () => res({}) }));
+async function coverOf(p) {
+  if (!p) return null;
+  const img = new Image(), u = URL.createObjectURL(new Blob([new Uint8Array(p.data)], { type: p.format }));
+  await new Promise(r => { img.onload = r; img.onerror = r; img.src = u; });
+  if (!img.width) { URL.revokeObjectURL(u); return null; }
+  const c = document.createElement('canvas'), k = Math.min(1, 400 / Math.max(img.width, img.height));
+  c.width = img.width * k; c.height = img.height * k; c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  URL.revokeObjectURL(u); return c.toDataURL('image/jpeg', .8);
+}
+async function upload(files) {
+  if (!S.user) return toast('Upload nur mit Login und Netz');
+  files = [...files]; let ok = 0; const fx = s => s.replace(/:/g, '/');
+  for (const [n, f] of files.entries()) {
+    const used = S.tracks.reduce((s, t) => s + (t.size || 0), 0);
+    if (used + f.size > LIMIT) { toast('Speicherlimit (1 GB) erreicht'); break; }
+    if (S.tracks.some(t => t.filename === f.name)) continue;
+    toast(`Lade ${n + 1}/${files.length}: ${f.name}`);
+    const tg = await readTags(f), base = fx(f.name.replace(/\.[^.]+$/, '')), i = base.indexOf(' - ');
+    const id = crypto.randomUUID(), key = `${S.user.id}/${id}.mp3`;
+    const up = await sb.storage.from('music').upload(key, f, { contentType: 'audio/mpeg' });
+    if (up.error) { toast('Upload fehlgeschlagen: ' + up.error.message); break; }
+    const row = { id, title: tg.title || (i > 0 ? base.slice(i + 3) : base), artist: tg.artist || (i > 0 ? base.slice(0, i) : null),
+      album: tg.album || null, genre: (tg.genre || '').replace(/^\(\d+\)/, '') || null, year: parseInt(tg.year) || null,
+      size: f.size, filename: f.name, audio_key: key, cover: await coverOf(tg.picture) };
+    const r = await sb.from('tracks').insert(row).select().single();
+    if (r.error) { await sb.storage.from('music').remove([key]); toast('Fehler: ' + r.error.message); break; }
+    S.tracks.push(r.data); ok++;
+  }
+  saveCache(); render(); toast(`${ok} Titel hochgeladen`);
+}
+
+// ── Offline Playlists ──────────────────────────────────────────
+async function syncOffline() {
+  const need = new Set(S.offPl.flatMap(p => S.plt[p] || []));
+  for (const id of [...S.off]) if (!need.has(id)) { await bDel(id); S.off.delete(id); }
+  for (const id of need) {
+    if (S.off.has(id)) continue; const t = S.tracks.find(x => x.id === id); if (!t) continue;
+    const { data, error } = await sb.storage.from('music').createSignedUrl(t.audio_key, 600);
+    if (error) return toast('Offline Download: kein Netz');
+    try { const r = await fetch(data.signedUrl); if (!r.ok) throw 0; await bSet(id, await r.blob()); S.off.add(id); toast(`Offline gespeichert: ${S.off.size}/${need.size}`); }
+    catch { return toast('Download abgebrochen'); }
+  }
+  refreshMain();
+}
+
+// ── Rendering ──────────────────────────────────────────────────
+const isCur = t => S.q[S.qi]?.id === t.id;
+const rowH = (t, i) => `<div class="row" data-a="play" data-i="${i}">${cov(t.cover, 44)}<div class="tx"><b class="${isCur(t) ? 'on' : ''}">${esc(t.title)}</b><small>${esc([t.artist, t.album].filter(Boolean).join(' · '))}</small></div>${S.off.has(t.id) ? '<span class="dot">↓</span>' : ''}<button class="more" data-a="more" data-id="${t.id}">⋯</button></div>`;
+const noG = { artists: 'Unbekannt', genres: 'Ohne Genre' };
+function groupTracks() {
+  const g = S.group;
+  if (S.tab === 'playlists') return (S.plt[g] || []).map(id => S.tracks.find(t => t.id === id)).filter(Boolean);
+  const f = S.tab === 'artists' ? 'artist' : 'genre';
+  return S.tracks.filter(t => (t[f] || noG[S.tab]) === g);
+}
+function listHTML() {
+  const empty = '<div class="empty">Keine Einträge</div>';
+  if (S.tab === 'songs') {
+    const q = S.search.toLowerCase();
+    S.cur = S.tracks.filter(t => !q || [t.title, t.artist, t.album, t.genre].join(' ').toLowerCase().includes(q));
+    return S.cur.map(rowH).join('') || '<div class="empty">Keine Titel. Tippe auf „+ Upload“.</div>';
+  }
+  if (!S.group) {
+    if (S.tab === 'playlists') return S.playlists.map(p => `<div class="row" data-a="grp" data-v="${p.id}"><div class="tx"><b>${esc(p.name)}</b><small>${(S.plt[p.id] || []).length} Titel${S.offPl.includes(p.id) ? ' · offline' : ''}</small></div>›</div>`).join('') + `<div class="row" data-a="newpl"><div class="tx"><b style="color:#fc3c44">+ Neue Playlist</b></div></div>`;
+    const f = S.tab === 'artists' ? 'artist' : 'genre', m = new Map();
+    S.tracks.forEach(t => { const k = t[f] || noG[S.tab]; if (!m.has(k)) m.set(k, []); m.get(k).push(t); });
+    return [...m].sort((a, b) => a[0].localeCompare(b[0])).map(([k, ts]) => `<div class="row" data-a="grp" data-v="${esc(k)}">${cov(ts.find(t => t.cover)?.cover, 48)}<div class="tx"><b>${esc(k)}</b><small>${ts.length} Titel</small></div>›</div>`).join('') || empty;
+  }
+  S.cur = groupTracks();
+  const pl = S.tab === 'playlists' ? S.playlists.find(p => p.id === S.group) : null;
+  const title = pl ? pl.name : S.group;
+  return `<div class="gh"><button class="ic" data-a="back">‹</button><b>${esc(title)}</b>${pl ? `<button class="btn ${S.offPl.includes(pl.id) ? 'on' : ''}" data-a="off" data-v="${pl.id}">Offline</button><button class="btn" data-a="delpl" data-v="${pl.id}">Löschen</button>` : ''}<button class="btn on" data-a="playall">▶</button></div>` + (S.cur.map(rowH).join('') || empty);
+}
+const body = () => (S.tab === 'songs' ? `<input id="se" class="se" placeholder="Suchen" value="${esc(S.search)}">` : '') + `<div id="list">${listHTML()}</div>`;
+function refreshMain() { const m = $('main'); if (!m) return; const st = m.scrollTop; m.innerHTML = body(); m.scrollTop = st; }
+
+function plH() {
+  const t = S.q[S.qi]; if (!t) return '';
+  const mini = `<div class="mini" data-a="open">${cov(t.cover, 40)}<div class="tx"><b>${esc(t.title)}</b><small>${esc(t.artist || '')}</small></div><button class="ic" data-a="tog">${S.playing ? '❚❚' : '▶'}</button><button class="ic" data-a="next">⏭</button><div class="bar" id="mb"></div></div>`;
+  if (!S.full) return mini;
+  return mini + `<div class="ov"><button class="ic" data-a="close" style="align-self:flex-start">⌄</button>${cov(t.cover, 10).replace('width:10px;height:10px', '').replace('class="cov"', 'class="cov big"')}<b style="font-size:20px">${esc(t.title)}</b><div style="color:#ccc;margin-top:4px">${esc(t.artist || '')}</div><small>${esc(t.album || '')}</small>
+  <div style="margin-top:20px"><input type="range" id="seek" min="0" max="100" step="0.1" value="0"><div class="tm"><span id="t1">0:00</span><span id="t2">-0:00</span></div></div>
+  <div class="ctl"><button class="${S.shuffle ? 'on' : ''}" data-a="shuf">⇄</button><button data-a="prev">⏮</button><button class="pp" data-a="tog">${S.playing ? '❚❚' : '▶'}</button><button data-a="next">⏭</button><button class="${S.repeat ? 'on' : ''}" data-a="rep">⟳</button></div></div>`;
+}
+function renderPl() { const e = $('pl'); if (e) { e.innerHTML = plH(); updateTime(); } }
+function sheetH() {
+  const s = S.sheet; if (!s) return '';
+  const inPl = S.tab === 'playlists' && S.group;
+  const items = s.t === 'add'
+    ? S.playlists.map(p => `<button data-a="addto" data-p="${p.id}" data-id="${s.id}">${esc(p.name)}</button>`).join('') || '<button data-a="x">Noch keine Playlist</button>'
+    : `<button data-a="addsheet" data-id="${s.id}">Zu Playlist hinzufügen</button>${inPl ? `<button data-a="rmpl" data-id="${s.id}">Aus Playlist entfernen</button>` : ''}<button data-a="deltrack" data-id="${s.id}" style="color:#f87171">Titel löschen</button>`;
+  return `<div class="sh" data-a="x"><div>${items}<button data-a="x" style="color:#777">Abbrechen</button></div></div>`;
+}
+function render() {
+  const app = $('app');
+  if (!S.user && !S.offlineOK) { app.innerHTML = `<div class="lg"><h1>Music</h1><input id="em" type="email" placeholder="E-Mail" autocomplete="username"><input id="pw" type="password" placeholder="Passwort" autocomplete="current-password"><button class="pill" data-a="login" style="padding:12px">Anmelden</button></div>`; return; }
+  const used = S.tracks.reduce((s, t) => s + (t.size || 0), 0);
+  app.innerHTML = `<div class="hd"><div><h1>Music</h1><small>${S.tracks.length} Titel · ${(used / 1e6).toFixed(0)} von ${LIMIT / 1e6} MB</small></div><div><button class="pill" data-a="upload">+ Upload</button><button class="ic" data-a="logout">⎋</button></div></div>
+  <div class="tabs">${[['songs', 'Titel'], ['artists', 'Künstler'], ['genres', 'Genre'], ['playlists', 'Playlists']].map(([k, l]) => `<button class="${S.tab === k ? 'on' : ''}" data-a="tab" data-v="${k}">${l}</button>`).join('')}</div>
+  <div id="main">${body()}</div><div id="pl">${plH()}</div><div id="sh">${sheetH()}</div>`;
+  updateTime();
+}
+
+// ── Aktionen ───────────────────────────────────────────────────
+const sheet = s => { S.sheet = s; $('sh').innerHTML = sheetH(); };
+async function act(a, d) {
+  switch (a) {
+    case 'login': { const { error } = await sb.auth.signInWithPassword({ email: $('em').value.trim(), password: $('pw').value });
+      if (error) return toast('Login fehlgeschlagen'); S.user = (await sb.auth.getUser()).data.user; await loadData(); render(); syncOffline(); break; }
+    case 'logout': await sb.auth.signOut(); au.pause(); Object.assign(S, { user: null, tracks: [], playlists: [], plt: {}, q: [], qi: -1, full: false, offlineOK: false }); render(); break;
+    case 'tab': S.tab = d.v; S.group = null; S.search = ''; render(); break;
+    case 'grp': S.group = d.v; refreshMain(); $('main').scrollTop = 0; break;
+    case 'back': S.group = null; refreshMain(); break;
+    case 'play': S.q = [...S.cur]; playAt(+d.i); break;
+    case 'playall': if (S.cur.length) { S.q = [...S.cur]; playAt(S.shuffle ? Math.floor(Math.random() * S.q.length) : 0); } break;
+    case 'upload': $('fi').click(); break;
+    case 'open': S.full = true; renderPl(); break;
+    case 'close': S.full = false; renderPl(); break;
+    case 'tog': toggle(); break; case 'next': next(); break; case 'prev': prev(); break;
+    case 'shuf': S.shuffle = !S.shuffle; renderPl(); break;
+    case 'rep': S.repeat = !S.repeat; renderPl(); break;
+    case 'more': sheet({ t: 'more', id: d.id }); break;
+    case 'addsheet': sheet({ t: 'add', id: d.id }); break;
+    case 'x': sheet(null); break;
+    case 'addto': { sheet(null); const pos = (S.plt[d.p] || []).length;
+      const { error } = await sb.from('playlist_tracks').insert({ playlist_id: d.p, track_id: d.id, pos });
+      if (error) return toast('Bereits in der Playlist'); (S.plt[d.p] = S.plt[d.p] || []).push(d.id); saveCache(); refreshMain(); toast('Hinzugefügt'); break; }
+    case 'rmpl': { sheet(null); await sb.from('playlist_tracks').delete().match({ playlist_id: S.group, track_id: d.id });
+      S.plt[S.group] = (S.plt[S.group] || []).filter(x => x !== d.id); saveCache(); refreshMain(); syncOffline(); break; }
+    case 'deltrack': { sheet(null); const t = S.tracks.find(x => x.id === d.id); if (!t || !confirm(`„${t.title}“ löschen?`)) return;
+      await sb.storage.from('music').remove([t.audio_key]); await sb.from('tracks').delete().eq('id', t.id); await bDel(t.id); S.off.delete(t.id);
+      S.tracks = S.tracks.filter(x => x.id !== t.id); for (const k in S.plt) S.plt[k] = S.plt[k].filter(x => x !== t.id); saveCache(); render(); break; }
+    case 'newpl': { const name = (prompt('Name der Playlist') || '').trim(); if (!name) return;
+      const r = await sb.from('playlists').insert({ name }).select().single(); if (r.error) return toast('Fehler');
+      S.playlists.push(r.data); S.plt[r.data.id] = []; saveCache(); refreshMain(); break; }
+    case 'delpl': { if (!confirm('Playlist löschen?')) return; await sb.from('playlists').delete().eq('id', d.v);
+      S.playlists = S.playlists.filter(p => p.id !== d.v); delete S.plt[d.v]; S.offPl = S.offPl.filter(p => p !== d.v); kvSet('offPl', S.offPl);
+      S.group = null; saveCache(); refreshMain(); syncOffline(); break; }
+    case 'off': { S.offPl = S.offPl.includes(d.v) ? S.offPl.filter(p => p !== d.v) : [...S.offPl, d.v]; kvSet('offPl', S.offPl); refreshMain(); syncOffline(); break; }
+  }
+}
+const app = $('app');
+app.addEventListener('click', e => { const el = e.target.closest('[data-a]'); if (!el) return; e.stopPropagation(); unlock(); act(el.dataset.a, el.dataset); });
+app.addEventListener('input', e => {
+  if (e.target.id === 'se') { S.search = e.target.value; $('list').innerHTML = listHTML(); }
+  if (e.target.id === 'seek') { au.currentTime = +e.target.value; updateTime(); } });
+app.addEventListener('pointerdown', e => { if (e.target.id === 'seek') S.seeking = true; });
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { S.seeking = false; }));
+$('fi').addEventListener('change', e => { unlock(); upload(e.target.files); e.target.value = ''; });
+
+// ── Start ──────────────────────────────────────────────────────
+(async () => {
+  navigator.storage?.persist?.();
+  S.off = new Set(await bKeys()); S.offPl = (await kvGet('offPl')) || [];
+  const { data } = await sb.auth.getSession().catch(() => ({ data: {} }));
+  S.user = data?.session?.user || null;
+  if (S.user) await loadData();
+  else { const d = await kvGet('data'); if (d && !navigator.onLine) { Object.assign(S, d); S.offlineOK = true; } }
+  render(); if (S.user && navigator.onLine) syncOffline();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
